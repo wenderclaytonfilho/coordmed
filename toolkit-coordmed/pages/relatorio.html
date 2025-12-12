@@ -1,0 +1,553 @@
+<!doctype html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Plataforma de Relatório de Plantões — NIR</title>
+
+  <!-- XLSX (SheetJS) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">HREC</div>
+      <div>
+        <h1>Relatório de Plantões — Para meu amigo ryanzudozadozudo da SILVA</h1>
+      </div>
+    </header>
+
+    <div class="card">
+      <div class="controls">
+        <label class="file-input">
+          <button class="btn" id="btnSelect">📁 Selecionar planilha</button>
+          <input type="file" id="fileInput" accept=".xls,.xlsx,.csv" />
+        </label>
+
+        <button class="btn ghost" id="btnSample">🔎 Ver primeiras linhas (preview)</button>
+
+        <div style="flex:1"></div>
+
+        <button class="btn secondary" id="btnExport" disabled>⬇️ Exportar XLSX</button>
+        <button class="btn ghost" id="btnClear" disabled>Limpar</button>
+      </div>
+
+      <div class="filters" style="margin-top:12px">
+        <label class="muted">Buscar médico:
+          <input type="text" id="searchDoc" placeholder="Digite o nome do médico..." />
+        </label>
+
+        <label class="muted">De:
+          <input type="date" id="dateFrom" />
+        </label>
+
+        <label class="muted">Até:
+          <input type="date" id="dateTo" />
+        </label>
+
+        <label class="muted">Colunas:
+          <select id="sheetSelect"></select>
+        </label>
+
+        <div style="flex:1"></div>
+
+        <div class="badge" id="rowsInfo">0 registros</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="table-wrap" id="tableWrap">
+        <table id="resultTable" aria-live="polite">
+          <thead>
+            <tr>
+              <th>Médico</th>
+              <th>Dia</th>
+              <th>Início</th>
+              <th>Fim</th>
+              <th>Duração</th>
+            </tr>
+          </thead>
+          <tbody id="resultBody">
+            <tr>
+              <td colspan="5" class="muted">Nenhum dado carregado — carregue uma planilha para começar.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="footer-actions" style="margin-top:12px">
+        <div class="stats" id="summaryText">—</div>
+        <div>
+          <button class="btn ghost small" id="btnCollapse">Copiar CSV</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const ALLOWED_DOCTORS = [
+      "ADEILSON ALVES DE SOUZA",
+      "ALEXANDRE HENRIQUE COSTA GONCALVES",
+      "ANDRE MENDES FIGUEIREDO",
+      "ANTONIO AUGUSTO JORDAO RAMOS ALBUQUERQUE",
+      "ANTONIO DE PADUA DE MELLO VIEIRA",
+      "BARBARA MAGALHAES MENDES",
+      "CAMILLA SOUSA PEREIRA GERMANO",
+      "CESAR HENRIQUE BATISTA DE MELO E SOUSA",
+      "DAVID ROGERIO GOMES RODRIGUES",
+      "DUNEY MACHADO MENDEZ",
+      "FABIO HERMANO DINIZ DE MELO",
+      "FERNANDO NEVES SAMPAIO DA LUZ",
+      "HUGO ATILA ALVES DA COSTA",
+      "IARA GEISA LIMA FERREIRA",
+      "ISABELLY REGINA DE ALBUQUERQUE CORTEZ",
+      "JAIFLAVIO JAIME LIMA",
+      "JOAO LUCAS XAVIER PEREIRA",
+      "JOSE ANTENOR LOPES MEDEIROS MENESES",
+      "JOSE DIAS DE OLIVEIRA NETO",
+      "JOSE JOCEILSON CRUZ DE ASSIS",
+      "KELLY GOMES DA SILVA",
+      "KLEYTON MATHEUS HONORATO MUNIZ",
+      "LANDSTEINER DOS ANJOS LEITE",
+      "LETICIA DE SOUZA PINTO",
+      "LUCAS DOS SANTOS GOMES",
+      "LUCAS VASCONCELOS PESSOA",
+      "MARIA VICTORIA ARAUJO RAFAEL",
+      "MARIANA MARIA SOUTO PERAZZO VALADARES",
+      "MATHEUS SOUTO PERAZZO VALADARES",
+      "MESSIAS DE JESUS MENDES",
+      "OSMAN DE SOUSA LIRA",
+      "OTACILIO JOSE BRITO CIPRIANO",
+      "PALOMA CORDEIRO DINIZ",
+      "RAYANNE ORELLANA PEREIRA CABRAL",
+      "RENATA RAQUEL DE OLIVEIRA RABELO MARINHO",
+      "RENATO PININGA HOLANDA CAVALCANTE",
+      "SEVERINA SILVA AMARAL",
+      "TALLES MENEZES AMARAL",
+      "THALYTA BRITO VERAS MARQUES",
+      "YOANDRYS FUENTES HECHAVARRIA",
+
+      // CLT
+      "ANA CAROLINE DANIEL DE SOUZA SILVA",
+      "ANDRE RODRIGUES QUINTAS",
+      "ARISTOTELES DE ARAUJO BRITO",
+      "CLAUDIO GONCALVES SOBREIRA",
+      "DENILSON ITAMAR ARAUJO ROCHA FERREIRA",
+      "DIOGO CESAR DE SOUZA BEZERRA",
+      "EDUARDO ANTONIO BUSTOS VILLABON",
+      "ERIVALDO RUMAO DA LUZ",
+      "EUGENIO PERICLES MUNIZ FERREIRA",
+      "FERNANDO NEVES PEREIRA DA LUZ",
+      "GERMANA FONSECA FIGUEIREDO",
+      "HUGO MARCILIO LACAVA DE CARVALHO",
+      "JAILSON DA PAIXAO RAMOS",
+      "JORGE LUIZ LUCENA LEITE",
+      "JOSE WILKER ARAUJO DOS ANJOS",
+      "KARLOS MAGNO CARVALHO LEAO",
+      "MAIRLA MARINA FERREIRA DIAS",
+      "MARCELO NUNES ALVES DE SOUSA",
+      "MONIQUE LIBERAL FIDELIS",
+      "NATALIA LOUIZE XAVIER PEREIRA LIMA",
+      "PATRICK DE MIRANDA LUCENA",
+      "PAULO ADRIANO BESERRA QUIDUTE",
+      "RAFAEL HENRIQUE BARBOSA",
+      "ROMARIO MASCENA AMORIM LOPES",
+      "TATIANE BEZERRA DOS SANTOS",
+      "TULIO FELIPE CARVALHO SILVA",
+      "VICTOR EMMANOEL PEREIRA VALOES",
+      "WEVERTON JEDIAEL RODRIGUES DE VASCONCELOS"
+    ];
+
+    /*
+      Configurações - altere apenas aqui se necessário
+    */
+    const COL_DATE = 'FLE_DTHR_CHEGADA';
+    const COL_DOC = 'PSV_NOME_R';
+
+    /* Estado */
+    let workbook = null;
+    let rawRows = [];
+    let processed = []; // results to display
+    let currentSheetName = null;
+
+    /* Elementos */
+    const fileInput = document.getElementById('fileInput');
+    const btnSelect = document.getElementById('btnSelect');
+    const btnExport = document.getElementById('btnExport');
+    const btnClear = document.getElementById('btnClear');
+    const btnSample = document.getElementById('btnSample');
+    const sheetSelect = document.getElementById('sheetSelect');
+    const resultBody = document.getElementById('resultBody');
+    const rowsInfo = document.getElementById('rowsInfo');
+    const searchDoc = document.getElementById('searchDoc');
+    const dateFrom = document.getElementById('dateFrom');
+    const dateTo = document.getElementById('dateTo');
+    const summaryText = document.getElementById('summaryText');
+    const btnCollapse = document.getElementById('btnCollapse');
+
+    btnSelect.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', handleFile, false);
+    btnExport.addEventListener('click', exportXLSX);
+    btnClear.addEventListener('click', resetAll);
+    btnSample.addEventListener('click', showPreview);
+    sheetSelect.addEventListener('change', () => {
+      currentSheetName = sheetSelect.value;
+      if (currentSheetName) parseSheet(currentSheetName);
+    });
+    searchDoc.addEventListener('input', renderResults);
+    dateFrom.addEventListener('change', renderResults);
+    dateTo.addEventListener('change', renderResults);
+    btnCollapse.addEventListener('click', copyCSV);
+
+    function handleFile(evt) {
+      const f = evt.target.files[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const data = new Uint8Array(e.target.result);
+        try {
+          workbook = XLSX.read(data, { type: 'array', cellDates: true });
+        } catch (err) {
+          alert('Erro ao ler o arquivo: ' + err.message);
+          return;
+        }
+        populateSheetList();
+        // auto-select first sheet
+        if (workbook.SheetNames.length) {
+          currentSheetName = workbook.SheetNames[0];
+          sheetSelect.value = currentSheetName;
+          parseSheet(currentSheetName);
+        }
+        btnExport.disabled = false;
+        btnClear.disabled = false;
+      };
+      reader.readAsArrayBuffer(f);
+    }
+
+    function populateSheetList() {
+      sheetSelect.innerHTML = '';
+      workbook.SheetNames.forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name; opt.textContent = name;
+        sheetSelect.appendChild(opt);
+      });
+    }
+
+    function parseSheet(sheetName) {
+      const sheet = workbook.Sheets[sheetName];
+      if (!sheet) return;
+      // to get raw cell values with dates intact, use sheet_to_json with raw:true
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: null, raw: true });
+      rawRows = rows;
+      rowsInfo.textContent = rows.length + ' linhas';
+      renderPreviewInfo();
+      processData();
+    }
+
+    /* --- helpers to parse date in a flexible way --- */
+    function excelDateToJSDate(serial) {
+      // Excel stores days since 1899-12-31, but there is a quirk with 1900 leap year
+      // A common conversion:
+      const utc_days = Math.floor(serial - 25569);
+      const utc_value = utc_days * 86400; // seconds
+      const fraction = serial - Math.floor(serial);
+      const seconds = Math.round(fraction * 86400);
+      const dt = new Date((utc_value + seconds) * 1000);
+      return dt;
+    }
+
+    function tryParseDate(v) {
+      if (v == null) return null;
+      if (v instanceof Date && !isNaN(v)) return v;
+      if (typeof v === 'number') {
+        // try treating as excel serial
+        try {
+          const d = excelDateToJSDate(v);
+          if (!isNaN(d)) return d;
+        } catch (e) { }
+      }
+      if (typeof v === 'string') {
+        // normalize common formats and try Date.parse
+        // replace common separators
+        let s = v.trim();
+        // replace "/" with "-" if looks like dd/mm/yyyy
+        // detect dd/mm/yyyy by checking first part length 1-2 and second also
+        if (/^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(s)) {
+          const parts = s.split(' ');
+          const datePart = parts[0].split('/');
+          // convert dd/mm/yyyy to yyyy-mm-dd
+          if (datePart.length === 3) {
+            const d = datePart[0].padStart(2, '0');
+            const m = datePart[1].padStart(2, '0');
+            const y = datePart[2].length === 2 ? ('20' + datePart[2]) : datePart[2];
+            s = `${y}-${m}-${d}` + (parts[1] ? ' ' + parts.slice(1).join(' ') : '');
+          }
+        }
+        // replace "." with ":" in time parts like 08.30
+        s = s.replace(/(\d)\.(\d)/g, '$1:$2');
+        // Remove extraneous text
+        s = s.replace(/[^\dT:\-\/ ]+/g, '');
+        const d = new Date(s);
+        if (!isNaN(d)) return d;
+        // fallback: try ISO like dd-mm-yyyy hh:MM
+        const parts = s.split(' ');
+        if (parts[0] && parts[0].indexOf('-') > -1) {
+          // try d-m-y => y-m-d
+          const dateParts = parts[0].split('-');
+          if (dateParts.length === 3) {
+            const p0 = dateParts[0].padStart(2, '0');
+            const p1 = dateParts[1].padStart(2, '0');
+            const p2 = dateParts[2].length === 2 ? ('20' + dateParts[2]) : dateParts[2];
+            const iso = `${p2}-${p1}-${p0}` + (parts[1] ? ' ' + parts.slice(1).join(' ') : '');
+            const d2 = new Date(iso);
+            if (!isNaN(d2)) return d2;
+          }
+        }
+      }
+      return null;
+    }
+
+    function formatDateYYYYMMDD(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+    function formatDateBr(d) {
+      return d.toLocaleDateString('pt-BR');
+    }
+    function formatTime(d) {
+      return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    }
+    function msToHoursMinutes(ms) {
+      if (ms < 0) ms = 0;
+      const totalMin = Math.round(ms / 60000);
+      const h = Math.floor(totalMin / 60);
+      const m = totalMin % 60;
+      return `${h}h ${m}m`;
+    }
+
+    /* --- processing --- */
+    function processData() {
+      if (!rawRows || rawRows.length === 0) {
+        processed = [];
+        renderResults();
+        return;
+      }
+
+      const groups = {}; // agrupamento médico+dia
+
+      rawRows.forEach(r => {
+        const doc = r[COL_DOC] != null ? String(r[COL_DOC]).trim() : "";
+        const rawDate = r[COL_DATE];
+
+        // tenta converter a data/hora
+        const dObj = tryParseDate(rawDate);
+
+        if (!doc || !dObj) return;
+
+        // normaliza nome do médico (maiúsculo)
+        const cleanDoc = doc.toUpperCase().trim();
+
+        // filtrar somente médicos permitidos
+        if (!ALLOWED_DOCTORS.includes(cleanDoc)) return;
+
+        // gera chave do dia
+        const dayKey = formatDateYYYYMMDD(dObj);
+        const key = cleanDoc + "|" + dayKey;
+
+        if (!groups[key]) {
+          groups[key] = {
+            medico: cleanDoc,
+            dia: dayKey,
+            times: []
+          };
+        }
+
+        groups[key].times.push(dObj);
+      });
+
+      // transformar grupos em array processado
+      const arr = Object.values(groups).map(g => {
+        const times = g.times.map(t => t.getTime());
+        const min = new Date(Math.min(...times)); // início
+        const max = new Date(Math.max(...times)); // fim
+        const durationMs = max.getTime() - min.getTime();
+
+        return {
+          medico: g.medico,
+          dia: g.dia,
+          inicio: min,
+          fim: max,
+          duracaoMs: durationMs
+        };
+      });
+
+      // ordenar — mais recente primeiro
+      arr.sort((a, b) => {
+        if (a.dia === b.dia) return a.medico.localeCompare(b.medico);
+        return a.dia < b.dia ? 1 : -1;
+      });
+
+      processed = arr;
+      renderResults();
+    }
+
+
+    function renderPreviewInfo() {
+      // show first 5 raw rows in console for debug
+      console.log('Preview raw rows:', rawRows.slice(0, 8));
+    }
+
+    function renderResults() {
+      const q = searchDoc.value.trim().toLowerCase();
+      const from = dateFrom.value ? new Date(dateFrom.value) : null;
+      const to = dateTo.value ? new Date(dateTo.value) : null;
+      const rows = processed.filter(item => {
+        if (q && item.medico.toLowerCase().indexOf(q) === -1) return false;
+        if (from) {
+          const itemDate = new Date(item.dia + 'T00:00:00');
+          if (itemDate < from) return false;
+        }
+        if (to) {
+          const itemDate = new Date(item.dia + 'T00:00:00');
+          if (itemDate > to) return false;
+        }
+        return true;
+      });
+
+      // render
+      resultBody.innerHTML = '';
+      if (rows.length === 0) {
+        resultBody.innerHTML = '<tr><td colspan="5" class="muted">Nenhum registro após filtros.</td></tr>';
+      } else {
+        rows.forEach(r => {
+          const tr = document.createElement('tr');
+          const tdDoc = document.createElement('td'); tdDoc.textContent = r.medico;
+          const tdDay = document.createElement('td'); tdDay.textContent = formatDateBr(new Date(r.dia + 'T00:00:00'));
+          const tdStart = document.createElement('td'); tdStart.textContent = formatTime(r.inicio);
+          const tdEnd = document.createElement('td'); tdEnd.textContent = formatTime(r.fim);
+          const tdDur = document.createElement('td'); tdDur.textContent = msToHoursMinutes(r.duracaoMs);
+          tr.appendChild(tdDoc); tr.appendChild(tdDay); tr.appendChild(tdStart); tr.appendChild(tdEnd); tr.appendChild(tdDur);
+          resultBody.appendChild(tr);
+        });
+      }
+
+      rowsInfo.textContent = rows.length + ' registros exibidos';
+      summaryText.textContent = `Total agrupamentos: ${processed.length} • Exibindo: ${rows.length}`;
+    }
+
+    /* --- export --- */
+    function exportXLSX() {
+      if (!processed || processed.length === 0) {
+        alert('Não há dados para exportar.');
+        return;
+      }
+      // map to plain objects
+      const wb = XLSX.utils.book_new();
+      const exportRows = processed.map(r => ({
+        'Médico': r.medico,
+        'Dia (YYYY-MM-DD)': r.dia,
+        'Dia (BR)': formatDateBr(new Date(r.dia + 'T00:00:00')),
+        'Início (HH:MM)': formatTime(r.inicio),
+        'Início (ISO)': r.inicio.toISOString(),
+        'Fim (HH:MM)': formatTime(r.fim),
+        'Fim (ISO)': r.fim.toISOString(),
+        'Duração': msToHoursMinutes(r.duracaoMs)
+      }));
+      const ws = XLSX.utils.json_to_sheet(exportRows);
+      XLSX.utils.book_append_sheet(wb, ws, 'Relatorio_Plantao');
+      XLSX.writeFile(wb, 'relatorio_plantao.xlsx');
+    }
+
+    /* --- copy CSV of current view --- */
+    function copyCSV() {
+      if (!processed || processed.length === 0) {
+        alert('Nenhum dado para copiar.');
+        return;
+      }
+      const q = searchDoc.value.trim().toLowerCase();
+      const from = dateFrom.value ? new Date(dateFrom.value) : null;
+      const to = dateTo.value ? new Date(dateTo.value) : null;
+      const rows = processed.filter(item => {
+        if (q && item.medico.toLowerCase().indexOf(q) === -1) return false;
+        if (from) {
+          const itemDate = new Date(item.dia + 'T00:00:00');
+          if (itemDate < from) return false;
+        }
+        if (to) {
+          const itemDate = new Date(item.dia + 'T00:00:00');
+          if (itemDate > to) return false;
+        }
+        return true;
+      });
+      const headers = ['Médico', 'Dia', 'Início', 'Fim', 'Duração'];
+      const lines = [headers.join(',')];
+      rows.forEach(r => {
+        lines.push([
+          `"${r.medico.replace(/"/g, '""')}"`,
+          r.dia,
+          formatTime(r.inicio),
+          formatTime(r.fim),
+          msToHoursMinutes(r.duracaoMs)
+        ].join(','));
+      });
+      const csv = lines.join('\n');
+      navigator.clipboard.writeText(csv).then(() => {
+        alert('CSV copiado para a área de transferência');
+      }).catch(() => {
+        // fallback: open in new tab
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+      });
+    }
+
+    /* --- misc --- */
+    function resetAll() {
+      workbook = null;
+      rawRows = [];
+      processed = [];
+      currentSheetName = null;
+      fileInput.value = '';
+      sheetSelect.innerHTML = '';
+      resultBody.innerHTML = '<tr><td colspan="5" class="muted">Nenhum dado carregado — carregue uma planilha para começar.</td></tr>';
+      rowsInfo.textContent = '0 registros';
+      btnExport.disabled = true;
+      btnClear.disabled = true;
+      summaryText.textContent = '—';
+    }
+
+    /* quick preview: show first 8 lines from rawRows in console (helpful for debugging) */
+    function showPreview() {
+      if (!rawRows || rawRows.length === 0) {
+        alert('Nenhum preview disponível. Carregue uma planilha primeiro.');
+        return;
+      }
+      let str = 'Preview — primeiras linhas:\n\n';
+      const sample = rawRows.slice(0, 8);
+      sample.forEach((r, i) => {
+        str += (i + 1) + '. ' + JSON.stringify(r) + '\n\n';
+      });
+      // show in a new window for easier copy/paste
+      const w = window.open('', '_blank', 'noopener');
+      if (w) {
+        w.document.write('<pre style="white-space:pre-wrap;font-family:monospace">' + escapeHtml(str) + '</pre>');
+        w.document.title = 'Preview planilha';
+      } else {
+        alert(str);
+      }
+    }
+    function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+    /* Initialize */
+    resetAll();
+
+  </script>
+</body>
+
+</html>

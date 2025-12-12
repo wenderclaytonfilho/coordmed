@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Plataforma de Evoluções - Extrator</title>
+  <link rel="stylesheet" href="style - contagem.css">
+</head>
+
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>Plataforma de Evoluções</h1>
+        <div class="small">Upload Excel (.xlsx). Extrai médicos (RCL_USR_LOGIN), datas (DT_TRANSF) e setores (STR_NOME).
+        </div>
+      </div>
+      <div style="margin-left:auto" class="center">
+        <input id="file" type="file" accept=".xlsx,.xls" />
+        <button id="loadSample"></button>
+      </div>
+    </header>
+
+    <div class="controls card">
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label><input id="modePJ" type="radio" name="mode" checked /> PJ (detalhado)</label>
+        <label><input id="modeCLT" type="radio" name="mode" /> CLT (contagem)</label>
+        <label class="small muted">Buscar médicos por coluna: <strong>RCL_USR_LOGIN</strong></label>
+        <label class="small muted">Data usada: <strong>DT_TRANSF</strong></label>
+        <label class="small muted">Setor: <strong>STR_NOME</strong></label>
+      </div>
+    </div>
+
+    <div class="grid" style="margin-top:12px">
+      <div>
+        <div class="card" style="margin-bottom:12px">
+          <div class="section-title"><strong>Médicos (RCL_USR_LOGIN)</strong><span class="small muted">Marque os que são
+              PJ</span></div>
+          <div id="doctorsList" class="list">Carregue um arquivo para popular a lista.</div>
+        </div>
+
+        <div class="card" style="margin-bottom:12px">
+          <div class="section-title"><strong>Resultados</strong><span class="small muted" id="summaryInfo"></span></div>
+
+          <div class="actions">
+            <button id="processBtn">Processar</button>
+            <div style="margin-left:auto" class="exportBtns">
+              <button id="exportPJBtn" title="Exportar PJ (xlsx)">Exportar PJ</button>
+              <button id="exportCLTBtn" title="Exportar CLT (xlsx)">Exportar CLT</button>
+              <button id="exportDupBtn" title="Exportar Duplicados (xlsx)">Exportar Duplicados</button>
+            </div>
+          </div>
+
+          <div id="results" style="max-height:520px;overflow:auto;margin-top:8px"></div>
+        </div>
+
+        <div class="card">
+          <div class="section-title"><strong>Duplicados (mesmo paciente no mesmo dia com médicos
+              diferentes)</strong><span class="small muted">REG duplicado no mesmo dia</span></div>
+          <div id="duplicates" class="list">Nenhum arquivo carregado.</div>
+        </div>
+      </div>
+
+      <aside>
+        <div class="card">
+          <div class="section-title"><strong>Opções</strong></div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <label><input id="groupByDay" type="checkbox" checked /> Agrupar por dia (data)</label>
+            <label><input id="groupBySector" type="checkbox" checked /> Agrupar por setor</label>
+            <div class="small muted">Dica: clique em <strong>Carregar arquivo de teste</strong> para usar o arquivo já
+              enviado ao sistema.</div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <footer style="margin-top:18px;color:var(--muted);font-size:13px">PJ = médicos marcados. CLT = médicos não marcados.
+      Duplicados = mesmo REG + mesma data com médicos diferentes.</footer>
+  </div>
+
+  <!-- SheetJS (XLSX) -->
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+
+  <script>
+    // --- CONFIG: use the sample path provided earlier (uploaded file) ---
+    const SAMPLE_PATH = '/mnt/data/evolucoes teste.xlsx';
+
+    // --- state ---
+    let rawRows = [];
+    const fileInput = document.getElementById('file');
+    const loadSampleBtn = document.getElementById('loadSample');
+    const doctorsList = document.getElementById('doctorsList');
+    const processBtn = document.getElementById('processBtn');
+    const results = document.getElementById('results');
+    const duplicatesEl = document.getElementById('duplicates');
+    const summaryInfo = document.getElementById('summaryInfo');
+    const exportPJBtn = document.getElementById('exportPJBtn');
+    const exportCLTBtn = document.getElementById('exportCLTBtn');
+    const exportDupBtn = document.getElementById('exportDupBtn');
+
+    // --- helpers for dates ---
+    function parseDate(raw) {
+      if (raw == null || raw === '') return null;
+      if (typeof raw === 'number') {
+        const d = XLSX.SSF.parse_date_code(raw);
+        if (!d) return null;
+        return new Date(Date.UTC(d.y, d.m - 1, d.d, d.H, d.M, d.S));
+      }
+      const s = raw.toString().trim();
+      // Try parse ISO-ish
+      const t = new Date(s);
+      if (!isNaN(t)) return t;
+      // try dd/mm/yyyy
+      const m = s.match(/(\d{1,2})\D(\d{1,2})\D(\d{4})/);
+      if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+      return null;
+    }
+    function fmtDate(d) {
+      if (!d) return '';
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    // --- load workbook ---
+    function loadWorkbook(arrayBuffer) {
+      try {
+        const wb = XLSX.read(arrayBuffer, { type: 'array' });
+        const first = wb.SheetNames[0];
+        const ws = wb.Sheets[first];
+        const json = XLSX.utils.sheet_to_json(ws, { defval: null });
+
+        rawRows = json.map(r => {
+          return {
+            REG: r['REG'] ?? r['Reg'] ?? r['registro'] ?? r['registro_paciente'] ?? r['Registro'] ?? r['reg'] ?? r['REGISTRO'] ?? r['ID'] ?? r['id'] ?? null,
+            NOME: r['NOME'] ?? r['Nome'] ?? r['nome'] ?? r['PACIENTE'] ?? r['Paciente'] ?? null,
+            DT_TRANSF: r['DT_TRANSF'] ?? r['DT_TRANSF\r'] ?? r['DT_TRANSF '] ?? r['Data'] ?? r['DT_TRANSF  '] ?? null,
+            STR_NOME: r['STR_NOME'] ?? r['STR_NOME '] ?? r['STR_NOME\r'] ?? r['Setor'] ?? r['STR_NOME'] ?? r['str_nome'] ?? null,
+            RCL_USR_LOGIN: r['RCL_USR_LOGIN'] ?? r['RCL_USR_LOGIN '] ?? r['Medico'] ?? r['RCL_USR_LOGIN'] ?? r['rcl_usr_login'] ?? null,
+            raw: r
+          };
+        }).map(r => {
+          const d = parseDate(r.DT_TRANSF);
+          return { ...r, DT_TRANSF: d, DT_STR: d ? fmtDate(d) : '' };
+        });
+
+        populateDoctors(rawRows);
+        summaryInfo.textContent = `${rawRows.length} linhas carregadas`;
+        results.innerHTML = '';
+        duplicatesEl.innerHTML = 'Pronto — processe para ver os resultados.';
+      } catch (err) {
+        alert('Erro ao ler workbook: ' + err.message);
+      }
+    }
+
+    // --- UI: populate doctors list ---
+    function populateDoctors(rows) {
+      const set = new Set();
+      rows.forEach(r => { if (r.RCL_USR_LOGIN) set.add(String(r.RCL_USR_LOGIN).trim()); });
+      const arr = Array.from(set).sort((a, b) => a.localeCompare(b));
+      if (arr.length === 0) {
+        doctorsList.innerHTML = '<div class="small muted">Nenhum médico encontrado na coluna RCL_USR_LOGIN.</div>';
+        return;
+      }
+      doctorsList.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      arr.forEach((doc, i) => {
+        const id = 'doc_' + i;
+        const div = document.createElement('div');
+        div.innerHTML = `<label><input type="checkbox" data-doc="${escapeHtml(doc)}" id="${id}"/> ${escapeHtml(doc)}</label>`;
+        frag.appendChild(div);
+      });
+      doctorsList.appendChild(frag);
+    }
+
+    function escapeHtml(s) { return (s + '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+    // --- events: file inputs ---
+    fileInput.addEventListener('change', async (ev) => {
+      const f = ev.target.files[0];
+      if (!f) return;
+      const ab = await f.arrayBuffer();
+      loadWorkbook(ab);
+    });
+
+    loadSampleBtn.addEventListener('click', async () => {
+      try {
+        const resp = await fetch(encodeURI(SAMPLE_PATH));
+        if (!resp.ok) throw new Error('Não foi possível carregar o arquivo de teste.');
+        const ab = await resp.arrayBuffer();
+        loadWorkbook(ab);
+      } catch (err) {
+        alert('Erro ao carregar arquivo de teste: ' + err.message);
+      }
+    });
+
+    // --- processing logic ---
+    processBtn.addEventListener('click', () => {
+      if (rawRows.length === 0) { alert('Carregue um arquivo primeiro.'); return; }
+
+      // selected PJ doctors (checkboxes)
+      const selectedPJ = Array.from(doctorsList.querySelectorAll('input[type=checkbox]:checked')).map(n => n.dataset.doc);
+      if (!selectedPJ) selectedPJ = [];
+
+      // compute PJ rows (only rows where doctor is in selectedPJ)
+      const pjRows = rawRows.filter(r => {
+        const doc = (r.RCL_USR_LOGIN || '').toString().trim();
+        return doc && selectedPJ.includes(doc);
+      });
+
+      // compute CLT counts: doctors NOT in selectedPJ
+      const cltRows = rawRows.filter(r => {
+        const doc = (r.RCL_USR_LOGIN || '').toString().trim();
+        return doc && !selectedPJ.includes(doc);
+      });
+
+      // Prepare PJ grouped by date if requested
+      const groupByDay = document.getElementById('groupByDay').checked;
+      const pjByDay = {};
+      pjRows.forEach(r => {
+        const day = r.DT_STR || 'SemData';
+        if (!pjByDay[day]) pjByDay[day] = [];
+        pjByDay[day].push(r);
+      });
+
+      // Prepare CLT counts: by date, doctor, setor
+      const cltCounts = {}; // { date: { doctor: { setor: count } } }
+      cltRows.forEach(r => {
+        const date = r.DT_STR || 'SemData';
+        const doctor = (r.RCL_USR_LOGIN || '').toString().trim() || 'SemMedico';
+        const setor = (r.STR_NOME || '').toString().trim() || 'SemSetor';
+        if (!cltCounts[date]) cltCounts[date] = {};
+        if (!cltCounts[date][doctor]) cltCounts[date][doctor] = {};
+        if (!cltCounts[date][doctor][setor]) cltCounts[date][doctor][setor] = 0;
+        cltCounts[date][doctor][setor]++;
+      });
+
+      // Duplicates: same REG + same date with more than one doctor
+      const dupMap = {}; // key = REG||date -> set of doctors and rows
+      rawRows.forEach(r => {
+        const reg = (r.REG || '').toString().trim();
+        const date = r.DT_STR || '';
+        const doc = (r.RCL_USR_LOGIN || '').toString().trim() || '';
+        if (!reg || !date) return;
+        const key = reg + '||' + date;
+        if (!dupMap[key]) dupMap[key] = { reg, date, docs: new Set(), rows: [] };
+        if (doc) dupMap[key].docs.add(doc);
+        dupMap[key].rows.push(r);
+      });
+      const duplicatesList = [];
+      Object.values(dupMap).forEach(entry => {
+        if (entry.docs.size > 1) {
+          // collect unique doctors as array
+          const doctors = Array.from(entry.docs).sort();
+          // Use the first row's NOME for name (if available)
+          const name = entry.rows.find(x => x.NOME)?.NOME ?? '';
+          duplicatesList.push({ REG: entry.reg, NOME: name, DATA: entry.date, MEDICOS: doctors.join('; ') });
+        }
+      });
+
+      // Render depending on mode radio (but both data sets are available for export)
+      const modePJ = document.getElementById('modePJ').checked;
+      const modeCLT = document.getElementById('modeCLT').checked;
+
+      // Build results HTML (two possible views: PJ or CLT)
+      results.innerHTML = '';
+
+      // PJ view
+      const pjContainer = document.createElement('div');
+      pjContainer.id = 'pjContainer';
+      pjContainer.className = 'card';
+      const pjTitle = document.createElement('div');
+      pjTitle.className = 'section-title';
+      pjTitle.innerHTML = `<strong>PJ (detalhado) — médicos marcados: ${selectedPJ.length}</strong><span class="small muted">Registros PJ: ${pjRows.length}</span>`;
+      pjContainer.appendChild(pjTitle);
+
+      const pjTable = document.createElement('table');
+      pjTable.id = 'pjTable';
+      const pjTBody = document.createElement('tbody');
+      // header
+      pjTable.innerHTML = `<thead><tr><th>REG</th><th>NOME</th><th>DATA</th><th>SETOR</th><th>MÉDICO</th></tr></thead>`;
+      // if grouping by day, show grouped
+      if (groupByDay) {
+        Object.keys(pjByDay).sort().forEach(day => {
+          const group = pjByDay[day];
+          // heading row for the day
+          const dayRow = document.createElement('tr');
+          dayRow.innerHTML = `<td colspan="5" style="background:rgba(255,255,255,0.02)"><strong>Dia: ${escapeHtml(day)} — ${group.length} registros</strong></td>`;
+          pjTBody.appendChild(dayRow);
+          group.forEach(r => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${escapeHtml(r.REG || '')}</td><td>${escapeHtml(r.NOME || '')}</td><td>${escapeHtml(r.DT_STR || '')}</td><td>${escapeHtml(r.STR_NOME || '')}</td><td>${escapeHtml(r.RCL_USR_LOGIN || '')}</td>`;
+            pjTBody.appendChild(tr);
+          });
+        });
+      } else {
+        pjRows.forEach(r => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${escapeHtml(r.REG || '')}</td><td>${escapeHtml(r.NOME || '')}</td><td>${escapeHtml(r.DT_STR || '')}</td><td>${escapeHtml(r.STR_NOME || '')}</td><td>${escapeHtml(r.RCL_USR_LOGIN || '')}</td>`;
+          pjTBody.appendChild(tr);
+        });
+      }
+      pjTable.appendChild(pjTBody);
+      pjContainer.appendChild(pjTable);
+
+      // CLT view
+      const cltContainer = document.createElement('div');
+      cltContainer.id = 'cltContainer';
+      cltContainer.className = 'card';
+      const cltTitle = document.createElement('div');
+      cltTitle.className = 'section-title';
+      // compute total CLT rows count for summary
+      let totalCltCount = 0;
+      Object.keys(cltCounts).forEach(date => {
+        Object.keys(cltCounts[date]).forEach(doc => {
+          Object.keys(cltCounts[date][doc]).forEach(setor => {
+            totalCltCount += cltCounts[date][doc][setor];
+          });
+        });
+      });
+      cltTitle.innerHTML = `<strong>CLT (contagem) — médicos não marcados</strong><span class="small muted">Registros CLT: ${totalCltCount}</span>`;
+      cltContainer.appendChild(cltTitle);
+
+      const cltTable = document.createElement('table');
+      cltTable.id = 'cltTable';
+      cltTable.innerHTML = `<thead><tr><th>DATA</th><th>MÉDICO</th><th>SETOR</th><th>EVOLUÇÕES</th></tr></thead>`;
+      const cltTbody = document.createElement('tbody');
+      Object.keys(cltCounts).sort().forEach(date => {
+        const doctors = cltCounts[date];
+        Object.keys(doctors).sort().forEach(doctor => {
+          const setores = doctors[doctor];
+          Object.keys(setores).sort().forEach(setor => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${escapeHtml(date)}</td><td>${escapeHtml(doctor)}</td><td>${escapeHtml(setor)}</td><td>${setores[setor]}</td>`;
+            cltTbody.appendChild(tr);
+          });
+        });
+      });
+      cltTable.appendChild(cltTbody);
+      cltContainer.appendChild(cltTable);
+
+      // duplicates view (simpler)
+      const dupContainer = document.createElement('div');
+      dupContainer.className = 'card';
+      dupContainer.id = 'dupContainer';
+      const dupTitle = document.createElement('div');
+      dupTitle.className = 'section-title';
+      dupTitle.innerHTML = `<strong>Duplicados no mesmo dia</strong><span class="small muted">${duplicatesList.length} casos</span>`;
+      dupContainer.appendChild(dupTitle);
+      const dupTable = document.createElement('table');
+      dupTable.id = 'dupTable';
+      dupTable.innerHTML = `<thead><tr><th>REG</th><th>NOME</th><th>DATA</th><th>MÉDICOS (diferentes)</th></tr></thead>`;
+      const dupTbody = document.createElement('tbody');
+      duplicatesList.forEach(d => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${escapeHtml(d.REG)}</td><td>${escapeHtml(d.NOME)}</td><td>${escapeHtml(d.DATA)}</td><td>${escapeHtml(d.MEDICOS)}</td>`;
+        dupTbody.appendChild(tr);
+      });
+      dupTable.appendChild(dupTbody);
+      dupContainer.appendChild(dupTable);
+
+      // Append to results in preferred order: depends on mode radio
+      if (modePJ) {
+        results.appendChild(pjContainer);
+        results.appendChild(cltContainer);
+        results.appendChild(dupContainer);
+      } else {
+        results.appendChild(cltContainer);
+        results.appendChild(pjContainer);
+        results.appendChild(dupContainer);
+      }
+
+      // Store computed datasets on window for export functions
+      window._PJ = { rows: pjRows, tableId: 'pjTable' };
+      window._CLT = { counts: cltCounts, tableId: 'cltTable' };
+      window._DUP = { list: duplicatesList, tableId: 'dupTable' };
+    });
+
+    // --- Export helpers using SheetJS ---
+    function exportTableAsXLSXFromArray(header, dataRows, filename = 'export.xlsx') {
+      // header: array of column names
+      // dataRows: array of arrays (each inner array matches header)
+      const ws_data = [header, ...dataRows];
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+      XLSX.writeFile(wb, filename);
+    }
+
+    // export PJ from previously computed window._PJ
+    exportPJBtn.addEventListener('click', () => {
+      if (!window._PJ) { alert('Gere os resultados primeiro (Processar).'); return; }
+      // build rows
+      const rows = window._PJ.rows.map(r => [r.REG || '', r.NOME || '', r.DT_STR || '', r.STR_NOME || '', r.RCL_USR_LOGIN || '']);
+      exportTableAsXLSXFromArray(['REG', 'NOME', 'DATA', 'SETOR', 'MEDICO'], rows, 'pj_evolucoes.xlsx');
+    });
+
+    // export CLT
+    exportCLTBtn.addEventListener('click', () => {
+      if (!window._CLT) { alert('Gere os resultados primeiro (Processar).'); return; }
+      const arr = [];
+      const counts = window._CLT.counts;
+      Object.keys(counts).sort().forEach(date => {
+        Object.keys(counts[date]).sort().forEach(doc => {
+          Object.keys(counts[date][doc]).sort().forEach(setor => {
+            arr.push([date, doc, setor, counts[date][doc][setor]]);
+          });
+        });
+      });
+      exportTableAsXLSXFromArray(['DATA', 'MEDICO', 'SETOR', 'EVOLUCOES'], arr, 'clt_evolucoes.xlsx');
+    });
+
+    // export duplicates
+    exportDupBtn.addEventListener('click', () => {
+      if (!window._DUP) { alert('Gere os resultados primeiro (Processar).'); return; }
+      const rows = window._DUP.list.map(d => [d.REG || '', d.NOME || '', d.DATA || '', d.MEDICOS || '']);
+      exportTableAsXLSXFromArray(['REG', 'NOME', 'DATA', 'MEDICOS'], rows, 'duplicados.xlsx');
+    });
+
+  </script>
+</body>
+
+</html>
