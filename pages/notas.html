@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Conferência de notas</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background: #f4f6f8;
+  padding: 30px;
+}
+.container {
+  max-width: 700px;
+  margin: auto;
+  background: #fff;
+  padding: 25px;
+  border-radius: 8px;
+  box-shadow: 0 0 10px rgba(0,0,0,.1);
+}
+h1 {
+  text-align: center;
+}
+input {
+  width: 100%;
+  margin: 15px 0;
+}
+button {
+  width: 100%;
+  padding: 12px;
+  font-size: 16px;
+  background: #1976d2;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+}
+button:hover {
+  background: #125ea5;
+}
+.status {
+  margin-top: 15px;
+  font-weight: bold;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>Extrator de notas fiscais</h1>
+
+  <input type="file" id="pdfs" multiple accept="application/pdf">
+
+  <button onclick="processarPDFs()">Extrair dados</button>
+
+  <div class="status" id="status"></div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+function extrair(texto, regex) {
+  const match = texto.match(regex);
+  return match ? match[1].trim() : "";
+}
+
+async function lerTextoPDF(file) {
+  const buffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+
+  let texto = "";
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    texto += content.items.map(i => i.str).join(" ") + " ";
+  }
+
+  return texto.replace(/\s+/g, " ");
+}
+
+async function processarPDFs() {
+  const arquivos = document.getElementById("pdfs").files;
+  if (!arquivos.length) {
+    alert("Selecione pelo menos um PDF");
+    return;
+  }
+
+  const dados = [];
+  document.getElementById("status").innerText = "⏳ Processando PDFs...";
+
+  for (const file of arquivos) {
+    const texto = await lerTextoPDF(file);
+
+    dados.push({
+      "Chave de Acesso": extrair(texto, /Chave de Acesso da NFS-e\s+(\d{44})/),
+      "Competência": extrair(texto, /Competência da NFS-e\s+([\d\/]{10})/),
+      "Data/Hora Emissão": extrair(
+        texto,
+        /Data e Hora da emissão da NFS-e\s+([\d\/]{10}\s[\d:]{8})/
+      ),
+      "Prestador": extrair(
+        texto,
+        /Nome \/ Nome Empresarial\s+(.+?)\s+E-mail/
+      ),
+      "CPF/CNPJ": extrair(
+        texto,
+        /CNPJ \/ CPF \/ NIF\s+([\d\.\-\/]+)/
+      ),
+      "Inscrição Municipal": extrair(
+        texto,
+        /Inscrição Municipal\s+([\d\-]+)/
+      ),
+      "Endereço": extrair(
+        texto,
+        /Endereço\s+(.+?)\s+Município/
+      ),
+      "Descrição do Serviço": extrair(
+        texto,
+        /Descrição do Serviço\s+(.+?)\s+TRIBUTAÇÃO MUNICIPAL/
+      ),
+      "Valor do Serviço": extrair(
+        texto,
+        /Valor do Serviço\s+R\$\s*([\d\.,]+)/
+      ),
+      "Valor Líquido": extrair(
+        texto,
+        /Valor Líquido da NFS-e\s+R\$\s*([\d\.,]+)/
+      ),
+      "Arquivo": file.name
+    });
+  }
+
+  const ws = XLSX.utils.json_to_sheet(dados);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "NFS-e");
+
+  XLSX.writeFile(wb, "nfse_extraidas.xlsx");
+
+  document.getElementById("status").innerText =
+    "Planilha gerada com sucesso!";
+}
+</script>
+
+</body>
+</html>
