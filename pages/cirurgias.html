@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ferramenta de Extração de Procedimentos Médicos</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            width: 80%;
+            margin: auto;
+            text-align: center;
+            padding: 50px 0;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        .upload-container {
+            margin-bottom: 20px;
+        }
+
+        input[type="file"] {
+            padding: 10px;
+            margin-right: 10px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        #output-container {
+            margin-top: 30px;
+        }
+
+        #status {
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+
+        #download-excel {
+            margin-top: 20px;
+            background-color: #007bff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Ferramenta de Extração de Procedimentos Médicos</h1>
+        
+        <div class="upload-container">
+            <input type="file" id="file-input" accept=".xlsx, .xls" />
+            <button onclick="processFile()">Processar Planilha</button>
+        </div>
+        
+        <div id="output-container">
+            <p id="status"></p>
+            <button id="download-excel" style="display: none;" onclick="downloadNewSpreadsheet()">Baixar Planilha Separada</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.1/xlsx.full.min.js"></script>
+    <script>
+        // Variáveis globais
+        let medicalData = { doctors: {}, anesthetists: {} };
+        let currentFile = null;
+
+        // Função para processar o arquivo
+        function processFile() {
+            const fileInput = document.getElementById('file-input');
+            if (fileInput.files.length === 0) {
+                alert("Por favor, selecione um arquivo.");
+                return;
+            }
+
+            currentFile = fileInput.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+
+                // Processa a aba "GERAL"
+                const generalSheet = workbook.Sheets['GERAL'];
+                if (generalSheet) {
+                    const json = XLSX.utils.sheet_to_json(generalSheet, { header: 1, defval: "" });
+                    medicalData = parseMedicalData(json);
+                    document.getElementById('status').textContent = 'Planilha carregada com sucesso! Clique no botão para baixar a planilha separada.';
+                    document.getElementById('download-excel').style.display = 'inline-block';
+                } else {
+                    alert("Não encontrei a aba 'GERAL' na planilha.");
+                }
+            };
+            
+            reader.readAsArrayBuffer(currentFile);
+        }
+
+        // Função para processar os dados médicos
+        function parseMedicalData(sheetData) {
+            const doctors = {};
+            const anesthetists = {};
+
+            // A primeira linha geralmente é o cabeçalho
+            const headers = sheetData[0];
+
+            // Identificar o índice das colunas
+            const doctor1Index = headers.indexOf("CIRURGIÃO 1");
+            const doctor2Index = headers.indexOf("CIRURGIÃO 2");
+            const anesthetistIndex = headers.indexOf("ANESTESISTA");
+            const patientNameIndex = headers.indexOf("PACIENTE");
+            const surgeryDateIndex = headers.indexOf("DATA");
+            const procedureIndex = headers.indexOf("TIPO DE CIRURGIA");
+            const categoryIndex = headers.indexOf("CATEGORIA");
+
+            if (doctor1Index === -1 || doctor2Index === -1 || anesthetistIndex === -1 || procedureIndex === -1 || patientNameIndex === -1 || surgeryDateIndex === -1 || categoryIndex === -1) {
+                alert("As colunas necessárias não foram encontradas na planilha.");
+                return { doctors: {}, anesthetists: {} };
+            }
+
+            // Processando os dados a partir da segunda linha
+            for (let i = 1; i < sheetData.length; i++) {
+                const row = sheetData[i];
+
+                const doctor1 = row[doctor1Index];
+                const doctor2 = row[doctor2Index];
+                const anesthetist = row[anesthetistIndex];
+                const patientName = row[patientNameIndex];
+                const surgeryDate = row[surgeryDateIndex];
+                const procedure = row[procedureIndex];
+                const category = row[categoryIndex];
+
+                // Modifica o tipo da cirurgia com base no papel do médico
+                const procedureWithType = {
+                    patientName,
+                    surgeryDate,
+                    category,
+                    procedure: getProcedureWithType(procedure, doctor1, "1° CIRURGIÃO"),
+                };
+
+                if (doctor1) {
+                    if (!doctors[doctor1]) doctors[doctor1] = [];
+                    doctors[doctor1].push(procedureWithType);
+                }
+
+                const procedureWithType2 = {
+                    patientName,
+                    surgeryDate,
+                    category,
+                    procedure: getProcedureWithType(procedure, doctor2, "2° CIRURGIÃO"),
+                };
+
+                if (doctor2) {
+                    if (!doctors[doctor2]) doctors[doctor2] = [];
+                    doctors[doctor2].push(procedureWithType2);
+                }
+
+                if (anesthetist) {
+                    if (!anesthetists[anesthetist]) anesthetists[anesthetist] = [];
+                    anesthetists[anesthetist].push(procedureWithType);
+                }
+            }
+
+            return { doctors, anesthetists };
+        }
+
+        // Função para adicionar o tipo de cirurgia dependendo do papel do médico
+        function getProcedureWithType(procedure, doctor, role) {
+            if (doctor) {
+                return `${procedure} (${role})`;
+            }
+            return procedure;
+        }
+
+        // Função para baixar a planilha separada por médicos
+        function downloadNewSpreadsheet() {
+            const newWorkbook = XLSX.utils.book_new();
+
+            // Criação das abas por médico
+            for (let doctor in medicalData.doctors) {
+                const sheetData = [["Paciente", "Data Cirurgia", "Procedimento", "Categoria"]];
+                const procedures = medicalData.doctors[doctor];
+
+                procedures.forEach(procedure => {
+                    sheetData.push([procedure.patientName, procedure.surgeryDate, procedure.procedure, procedure.category]);
+                });
+
+                const newSheet = XLSX.utils.aoa_to_sheet(sheetData);
+                XLSX.utils.book_append_sheet(newWorkbook, newSheet, doctor);
+            }
+
+            // Criação das abas por anestesista
+            for (let anesthetist in medicalData.anesthetists) {
+                const sheetData = [["Paciente", "Data Cirurgia", "Procedimento", "Categoria"]];
+                const procedures = medicalData.anesthetists[anesthetist];
+
+                procedures.forEach(procedure => {
+                    sheetData.push([procedure.patientName, procedure.surgeryDate, procedure.procedure, procedure.category]);
+                });
+
+                const newSheet = XLSX.utils.aoa_to_sheet(sheetData);
+                XLSX.utils.book_append_sheet(newWorkbook, newSheet, anesthetist);
+            }
+
+            // Baixar a nova planilha
+            XLSX.writeFile(newWorkbook, "procedimentos_separados.xlsx");
+        }
+    </script>
+</body>
+</html>
