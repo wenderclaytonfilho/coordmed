@@ -81,6 +81,25 @@
         let medicalData = { doctors: {}, anesthetists: {} };
         let currentFile = null;
 
+        // Valores predefinidos para as cirurgias
+        const procedureValues = {
+            "colecistectomia": { doctor1: 700, doctor2: 300 },
+            "histerectomia": { doctor1: 700, doctor2: 300 },
+            "hernioplastia": { doctor1: 700, doctor2: 300 },
+            "ooforectomia": { doctor1: 700, doctor2: 300 },
+            "laparotomia": { doctor1: 200, doctor2: 100 },
+            "postectomia": { doctor1: 200, doctor2: 100 },
+            "pequena cirurgia": { doctor1: 200, doctor2: 100 },
+            "sutura": { doctor1: 200, doctor2: 100 },
+            "drenagem": { doctor1: 200, doctor2: 100 },
+            "exerese": { doctor1: 200, doctor2: 100 },
+            "acesso venoso central": { doctor1: 200, doctor2: 100 },
+            "amputação": { doctor1: 200, doctor2: 100 },
+            "apendicectomia": { doctor1: 200, doctor2: 100 },
+            "vasectomia": { doctor1: 223.18, doctor2: 93.51 },
+            "laqueadura": { doctor1: 223.18, doctor2: 93.51 }
+        };
+
         // Função para processar o arquivo
         function processFile() {
             const fileInput = document.getElementById('file-input');
@@ -144,12 +163,16 @@
                 const procedure = row[procedureIndex];
                 const category = row[categoryIndex];
 
+                // Obtém o valor da cirurgia baseado no procedimento
+                const procedureValue = getProcedureValue(procedure, doctor1, doctor2);
+
                 // Modifica o tipo da cirurgia com base no papel do médico
                 const procedureWithType = {
-                    patientName,
-                    surgeryDate,
                     category,
+                    surgeryDate,
+                    patientName,
                     procedure: getProcedureWithType(procedure, doctor1, "1° CIRURGIÃO", doctor2),
+                    value: procedureValue.doctor1
                 };
 
                 if (doctor1) {
@@ -158,10 +181,11 @@
                 }
 
                 const procedureWithType2 = {
-                    patientName,
-                    surgeryDate,
                     category,
+                    surgeryDate,
+                    patientName,
                     procedure: getProcedureWithType(procedure, doctor2, "2° CIRURGIÃO", doctor1),
+                    value: procedureValue.doctor2
                 };
 
                 if (doctor2) {
@@ -176,6 +200,21 @@
             }
 
             return { doctors, anesthetists };
+        }
+
+        // Função para obter o valor da cirurgia baseado no procedimento
+        function getProcedureValue(procedure, doctor1, doctor2) {
+            // Normaliza o nome do procedimento para minúsculas
+            const normalizedProcedure = procedure.toLowerCase();
+            const defaultValue = { doctor1: 0, doctor2: 0 };
+
+            // Busca por correspondência de substring
+            for (let key in procedureValues) {
+                if (normalizedProcedure.includes(key)) {
+                    return procedureValues[key];
+                }
+            }
+            return defaultValue; // Retorna valor padrão se não encontrar correspondência
         }
 
         // Função para adicionar o tipo da cirurgia dependendo do papel do médico
@@ -201,11 +240,11 @@
 
             // Criação das abas por médico
             for (let doctor in medicalData.doctors) {
-                const sheetData = [["Data Cirurgia" , "Paciente", "Procedimento", "Categoria"]];
+                const sheetData = [["Categoria", "Data Cirurgia", "Paciente", "Procedimento", "Valor"]];
                 const procedures = medicalData.doctors[doctor];
 
                 procedures.forEach(procedure => {
-                    sheetData.push([procedure.surgeryDate, procedure.patientName, procedure.procedure, procedure.category]);
+                    sheetData.push([procedure.category, procedure.surgeryDate, procedure.patientName, procedure.procedure, procedure.value]);
                 });
 
                 const cleanDoctorName = cleanSheetName(doctor);
@@ -213,13 +252,13 @@
                 XLSX.utils.book_append_sheet(newWorkbook, newSheet, cleanDoctorName);
             }
 
-            // Criação das abas por anestesista
+            // Criação das abas por anesthesista
             for (let anesthetist in medicalData.anesthetists) {
-                const sheetData = [["Data Cirurgia" , "Paciente", "Procedimento", "Categoria"]];
+                const sheetData = [["Categoria", "Data Cirurgia", "Paciente", "Procedimento", "Valor"]];
                 const procedures = medicalData.anesthetists[anesthetist];
 
                 procedures.forEach(procedure => {
-                    sheetData.push([procedure.surgeryDate, procedure.patientName, procedure.procedure, procedure.category]);
+                    sheetData.push([procedure.category, procedure.surgeryDate, procedure.patientName, procedure.procedure, procedure.value]);
                 });
 
                 const cleanAnesthetistName = cleanSheetName(anesthetist);
