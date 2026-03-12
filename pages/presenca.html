@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Presença Médica</title>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <style>
+        body {
+            font-family: Arial;
+            background: #f2f4f8;
+            margin: 0;
+            padding: 15px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 5px;
+        }
+
+        .setor {
+            margin-top: 25px;
+        }
+
+        .setor h2 {
+            background: #e9eef6;
+            padding: 8px;
+            border-radius: 5px;
+        }
+
+        .medico {
+            border-bottom: 1px solid #ddd;
+            padding: 8px 0;
+        }
+
+        .medico-top {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            margin-top: 5px;
+            padding: 6px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+
+        button {
+            margin-top: 25px;
+            width: 100%;
+            padding: 12px;
+            background: #1f6feb;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #174ea6;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+
+        <h1>Controle de Presença Médica</h1>
+
+        <label>Data do Plantão:</label>
+        <input type="date" id="dataPlantao">
+
+        <div id="lista"></div>
+
+        <button onclick="gerarPDF()">Gerar PDF</button>
+        <button onclick="copiarRelatorio()">Copiar Relatório</button>
+
+    </div>
+
+    <script>
+
+        document.getElementById("dataPlantao").value = new Date().toISOString().split("T")[0];
+
+        const setores = {
+
+            "Emergência": [
+                "AÍLTON NIXON SUASSUNA PORTO",
+                "ALEXANDRE HENRIQUE COSTA GONÇALVES",
+                "RAYANNE ORELLANA PEREIRA CABRAL",
+                "MESSIAS DE JESUS MENDES",
+                "DENILSON ITAMAR ARAÚJO ROCHA FERREIRA",
+                "VICTOR EMMANOEL PEREIRA VALÕES",
+                "PATRICK DE MIRANDA LUCENA",
+                "RÔMULO MARTINS FERREIRA SANTOS",
+                "PALOMA CORDEIRO DINIZ",
+                "SEVERINA SILVA AMARAL",
+                "DAVID ROGERIO GOMES RODRIGUES",
+                "JOSÉ ANTENOR MEDEIROS DE MENESES",
+                "JOÃO LUCAS",
+                "MARIA VITORIA ARAÚJO RAFAEL",
+                "CÉSAR HENRIQUE BATISTA DE MELO SOUZA",
+                "LETICIA",
+                "BARBARA MENDES",
+                "LANDSTEINER DOS ANJOS LEITE",
+                "KLEITON MUNIZ",
+                "ARISTÓTELES DE ARAÚJO BRITO",
+                "ANA CAROLINE DANIEL DE SOUZA SILVA",
+                "ANDRÉ MENDES FIGUEIREDO",
+                "WEVERTON JEDIAEL RODRIGUES DE VASCONCELOS"
+            ],
+
+            "Ambulatório": [
+                "ANDRÉ LUIS HENRIQUE PINTO PEIXOTO",
+                "ANDRÉ RODRIGUES QUINTAS",
+                "ANTÔNIO GODE DE MORAES",
+                "FRANCISCO ERLANIO DE MELO JÚNIOR",
+                "JORGE LUIZ LUCENA LEITE",
+                "JORLANIO JOSÉ DIAS DE MORAES",
+                "JOSÉ MÍLTON FERNANDES DUARTE MELO",
+                "MICHELLE SOARES DE MOURA",
+                "DUNAY MACHADO MENDEZ",
+                "PEDRO HENRIQUE DE LIMA E SILVA",
+                "YOANDRYS FUENTES HECHAVARRIA",
+                "FERNANDO NEVES PEREIRA DA LUZ",
+                "MATHEUS SOUTO PERAZZO VALADARES",
+                "DENILSON ITAMAR ARAÚJO ROCHA FERREIRA"
+            ],
+
+            "Cirurgião": [
+                "ERIVALDO RUMÃO DA LUZ",
+                "FERNANDO NEVES PEREIRA DA LUZ",
+                "FERNANDO FILHO",
+                "YOANDRYS FUENTES HECHAVARRIA",
+                "MATHEUS SOUTO PERAZZO VALADARES",
+                "OTACÍLIO JOSÉ BRITO CIPRIANO",
+                "DENILSON ITAMAR ARAÚJO ROCHA FERREIRA",
+                "TALLES MENENZES AMARAL",
+                "DUNAY MACHADO MENDEZ"
+            ],
+
+            "NEO e Pediatria": [
+                "CLÁUDIO GONÇALVES SOBREIRA",
+                "JORGE LUIZ LUCENA LEITE",
+                "TATIANE BEZERRA DOS SANTOS",
+                "ROMÁRIO MASCENA AMORIM LOPES",
+                "LUCAS SANTOS",
+                "ALEXANDRE HENRIQUE COSTA GONÇALVES",
+                "MARIANA MARIA SOUTO PERAZZO",
+                "TALITA BRITO",
+                "MICHELINE NUNES ALVES DE SOUZA",
+                "JAÍLSON DA PAIXÃO RAMOS",
+                "NATÁLIA LOUIZE XAVIER PEREIRA LIMA",
+                "ADEILSON ALVES DE SOUZA",
+                "JOSÉ ANTENOR MEDEIROS DE MENESES"
+            ],
+
+            "Obstetrícia": [
+                "PAULO ADRIANO BESERRA QUIDUTE",
+                "OSMAN DE SOUZA LIRA",
+                "TÚLIO FELIPE CARVALHO SILVA",
+                "RENATA RAQUEL DE OLIVEIRA RABELO MARINHO",
+                "MONIQUE LIBERAL FIDÉLIS",
+                "ANTÔNIO AUGUSTO JORDÃO RAMOS ALBUQUERQUE",
+                "ANTÔNIO DE PÁDUA MELLO VIEIRA",
+                "CAMILA SOUSA PEREIRA GERMANO",
+                "KELLY GOMES",
+                "BEATRIZ GERMANO",
+                "IARA GEISA LIMA FERREIRA"
+            ],
+
+            "Ortopedia": [
+                "EUGÊNIO PÉRICLES MUNIZ FERREIRA",
+                "MARCELO NUNES ALVES DE SOUSA",
+                "DIOGO CÉSAR DE SOUZA BEZERRA",
+                "JOSÉ WILKER ARAÚJO DOS ANJOS",
+                "HUGO ATILA ALVES DA COSTA",
+                "JOSÉ DIAS DE OLIVEIRA NETO",
+                "LUCAS DOS SANTOS GOMES",
+                "RENATO HOLANDA"
+            ],
+
+            "UTI PED": [
+                "ROMÁRIO MASCENA AMORIM LOPES",
+                "ISABELLY REGINA DE ALBUQUERQUE CORTEZ",
+                "JOSÉ JOCEILSON CRUZ DE ASSIS",
+                "ADEILSON ALVES DE SOUZA"
+            ],
+
+            "UTI ADULTA": [
+                "MAIRLA MARINA FERREIRA DIAS",
+                "HUGO MARCÍLIO LACAVA DE CARVALHO",
+                "RAFAEL HENRIQUE BARBOSA",
+                "KARLOS MAGNO CARVALHO LEÃO",
+                "FÁBIO HERMANO DINIZ DE MELO"
+            ]
+
+        };
+
+        const lista = document.getElementById("lista");
+
+        for (const setor in setores) {
+
+            let div = document.createElement("div");
+            div.className = "setor";
+
+            div.innerHTML = `<h2>${setor}</h2>`;
+
+            setores[setor].forEach(nome => {
+
+                let item = document.createElement("div");
+                item.className = "medico";
+
+                item.innerHTML = `
+
+<div class="medico-top">
+<input type="checkbox" class="check">
+<strong>${nome}</strong>
+</div>
+
+<input type="text" class="obs" placeholder="Observação (troca, licença, viagem...)">
+
+`;
+
+                div.appendChild(item);
+
+            });
+
+            lista.appendChild(div);
+
+        }
+
+        function copiarRelatorio() {
+
+            const dataPlantao = document.getElementById("dataPlantao").value;
+
+            const agora = new Date();
+            const dataGeracao = agora.toLocaleDateString();
+            const horaGeracao = agora.toLocaleTimeString();
+
+            let texto = "";
+
+            texto += "RELATÓRIO DE PRESENÇA MÉDICA\n\n";
+            texto += "Data do Plantão: " + dataPlantao + "\n";
+            texto += "Gerado em: " + dataGeracao + " às " + horaGeracao + "\n\n";
+
+            document.querySelectorAll(".setor").forEach(setorDiv => {
+
+                const nomeSetor = setorDiv.querySelector("h2").innerText;
+
+                let bloco = "";
+
+                setorDiv.querySelectorAll(".medico").forEach(med => {
+
+                    let nome = med.querySelector("strong").innerText;
+                    let presente = med.querySelector(".check").checked;
+                    let obs = med.querySelector(".obs").value;
+
+                    if (presente) {
+
+                        bloco += "- " + nome + (obs ? " | " + obs : "") + "\n";
+
+                    }
+
+                });
+
+                if (bloco !== "") {
+
+                    texto += nomeSetor + "\n";
+                    texto += bloco + "\n";
+
+                }
+
+            });
+
+            navigator.clipboard.writeText(texto);
+
+            alert("Relatório copiado para a área de transferência!");
+
+        }
+
+        function gerarPDF() {
+
+            const { jsPDF } = window.jspdf;
+
+            let doc = new jsPDF();
+
+            let y = 10;
+
+            const dataPlantao = document.getElementById("dataPlantao").value;
+
+            const agora = new Date();
+            const dataGeracao = agora.toLocaleDateString();
+            const horaGeracao = agora.toLocaleTimeString();
+
+            doc.setFontSize(16);
+            doc.text("Relatório de Presença Médica", 10, y);
+
+            y += 10;
+
+            doc.setFontSize(11);
+            doc.text("Data do Plantão: " + dataPlantao, 10, y);
+
+            y += 6;
+
+            doc.text("Gerado em: " + dataGeracao + " às " + horaGeracao, 10, y);
+
+            y += 10;
+
+            document.querySelectorAll(".setor").forEach(setorDiv => {
+
+                const nomeSetor = setorDiv.querySelector("h2").innerText;
+
+                doc.setFontSize(13);
+                doc.text(nomeSetor, 10, y);
+
+                y += 6;
+
+                setorDiv.querySelectorAll(".medico").forEach(med => {
+
+                    let nome = med.querySelector("strong").innerText;
+                    let presente = med.querySelector(".check").checked;
+                    let obs = med.querySelector(".obs").value;
+
+                    if (presente) {
+
+                        doc.setFontSize(11);
+                        doc.text("- " + nome + (obs ? " | " + obs : ""), 10, y);
+
+                        y += 6;
+
+                        if (y > 280) {
+                            doc.addPage();
+                            y = 10;
+                        }
+
+                    }
+
+                });
+
+                y += 4;
+
+            });
+
+            const dataArquivo = dataPlantao.split("-").reverse().join("-");
+            doc.save(`MÉDICOS PRESENTES (${dataArquivo}).pdf`);;
+
+        }
+
+    </script>
+
+</body>
+
+</html>
