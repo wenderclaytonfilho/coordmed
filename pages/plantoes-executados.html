@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Relatório de Presença Médica</title>
+
+    <style>
+        body {
+            font-family: Arial;
+            background: #eef2f7;
+            padding: 30px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: auto;
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #1f4e79;
+        }
+
+        input[type=file] {
+            margin-top: 10px;
+        }
+
+        button {
+            background: #1f6feb;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            margin-top: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #174ea6;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 25px;
+        }
+
+        th {
+            background: #1f4e79;
+            color: white;
+            padding: 10px;
+            text-align: left;
+        }
+
+        td {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        tr:hover {
+            background: #f5f7fa;
+        }
+
+        .busca {
+            margin-top: 20px;
+            padding: 8px;
+            width: 300px;
+        }
+
+        .obs {
+            color: #c0392b;
+            font-size: 13px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+
+        <h1>Relatório de Presença Médica</h1>
+
+        <input type="file" id="arquivo">
+
+        <br>
+
+        <button onclick="processar()">Processar Relatório</button>
+        <button onclick="exportar()">Exportar TXT</button>
+        <button onclick="exportarExcel()">Exportar Excel</button>
+
+        <br>
+
+        <input class="busca" placeholder="Buscar médico..." onkeyup="filtrar(this.value)">
+
+        <table id="tabela">
+
+            <thead>
+                <tr>
+                    <th>Médico</th>
+                    <th>Total de Plantões</th>
+                    <th>Dias Trabalhados</th>
+                    <th>Observações</th>
+                </tr>
+            </thead>
+
+            <tbody></tbody>
+
+        </table>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <script>
+
+        let dadosMedicos = {}
+
+        function processar() {
+
+            const file = document.getElementById("arquivo").files[0]
+
+            if (!file) {
+                alert("Selecione um arquivo")
+                return
+            }
+
+            const reader = new FileReader()
+
+            reader.onload = function (e) {
+
+                const texto = e.target.result
+
+                const relatorios = texto.split("RELATÓRIO DE PRESENÇA MÉDICA")
+
+                dadosMedicos = {}
+
+                relatorios.forEach(rel => {
+
+                    const dataMatch = rel.match(/Data do Plantão:\s*(\d{4}-\d{2}-\d{2})/)
+
+                    if (!dataMatch) return
+
+                    const data = dataMatch[1]
+
+                    const linhas = rel.split("\n")
+
+                    linhas.forEach(l => {
+
+                        l = l.trim()
+
+                        if (l.startsWith("- ")) {
+
+                            let conteudo = l.replace("- ", "").trim()
+
+                            let nome = conteudo
+                            let obs = ""
+
+                            if (conteudo.includes("|")) {
+
+                                let p = conteudo.split("|")
+
+                                nome = p[0].trim()
+                                obs = p[1].trim()
+
+                            }
+
+                            if (!dadosMedicos[nome]) {
+                                dadosMedicos[nome] = []
+                            }
+
+                            dadosMedicos[nome].push({
+                                data: data,
+                                obs: obs
+                            })
+
+                        }
+
+                    })
+
+                })
+
+                gerarTabela()
+
+            }
+
+            reader.readAsText(file)
+
+        }
+
+        function formatar(data) {
+
+            let p = data.split("-")
+
+            return `${p[2]}/${p[1]}`
+
+        }
+
+        function gerarTabela() {
+
+            const tbody = document.querySelector("#tabela tbody")
+
+            tbody.innerHTML = ""
+
+            const nomes = Object.keys(dadosMedicos).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+
+            nomes.forEach(nome => {
+
+                const registros = dadosMedicos[nome]
+
+                let dias = []
+                let obs = []
+
+                registros.forEach(r => {
+
+                    dias.push(formatar(r.data))
+
+                    if (r.obs) {
+                        obs.push(`${formatar(r.data)} (${r.obs})`)
+                    }
+
+                })
+
+                const tr = document.createElement("tr")
+
+                tr.innerHTML = `
+<td>${nome}</td>
+<td>${registros.length}</td>
+<td>${dias.join(", ")}</td>
+<td class="obs">${obs.join("<br>")}</td>
+`
+
+                tbody.appendChild(tr)
+
+            })
+
+        }
+
+        function filtrar(valor) {
+
+            valor = valor.toLowerCase()
+
+            document.querySelectorAll("#tabela tbody tr").forEach(tr => {
+
+                const nome = tr.children[0].innerText.toLowerCase()
+
+                tr.style.display = nome.includes(valor) ? "" : "none"
+
+            })
+
+        }
+
+        function exportar() {
+
+            let texto = "RELATÓRIO DE PLANTÕES\n\n"
+
+            Object.keys(dadosMedicos).forEach(nome => {
+
+                texto += nome + "\n"
+
+                dadosMedicos[nome].forEach(r => {
+
+                    let data = r.data.split("-")
+
+                    let d = `${data[2]}/${data[1]}/${data[0]}`
+
+                    texto += d
+
+                    if (r.obs) {
+                        texto += ` (${r.obs})`
+                    }
+
+                    texto += "\n"
+
+                })
+
+                texto += "\n"
+
+            })
+
+            const blob = new Blob([texto], { type: "text/plain" })
+
+            const link = document.createElement("a")
+
+            link.href = URL.createObjectURL(blob)
+
+            link.download = "plantao_medicos.txt"
+
+            link.click()
+
+        }
+
+        function exportarExcel() {
+
+            let dados = []
+
+            Object.keys(dadosMedicos).forEach(nome => {
+
+                let registros = dadosMedicos[nome]
+
+                let dias = []
+                let obs = []
+
+                registros.forEach(r => {
+
+                    let p = r.data.split("-")
+                    let dataFormatada = `${p[2]}/${p[1]}/${p[0]}`
+
+                    dias.push(dataFormatada)
+
+                    if (r.obs) {
+                        obs.push(`${dataFormatada} (${r.obs})`)
+                    }
+
+                })
+
+                dados.push({
+                    Medico: nome,
+                    Plantoes: registros.length,
+                    Dias: dias.join(", "),
+                    Observacoes: obs.join(" | ")
+                })
+
+            })
+
+            const ws = XLSX.utils.json_to_sheet(dados)
+
+            const wb = XLSX.utils.book_new()
+
+            XLSX.utils.book_append_sheet(wb, ws, "Relatorio")
+
+            XLSX.writeFile(wb, "relatorio_plantoes_medicos.xlsx")
+
+        }
+
+    </script>
+
+</body>
+
+</html>
