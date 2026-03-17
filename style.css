@@ -1,72 +1,93 @@
-*{
+* {
 	margin: 0;
 	padding: 0;
 	box-sizing: border-box;
-	color: #ffffff;
-	font-family: 'Karla',sans-serif;
+	font-family: 'Karla', sans-serif;
 }
 
-:root{
-	--bgcolor: #ffffff;
-	--accentcolor: #1f1f1f;
+:root {
+	--bgcolor: #f4f8fb;
+	--primary: #2b6cb0;
+	--secondary: #1a365d;
+	--white: #ffffff;
+	--gray: #6b7280;
 }
 
-body{
+body {
 	width: 100vw;
 	height: 100vh;
 	display: flex;
-	background-color: var(--bgcolor);
+	flex-direction: column;
 	justify-content: center;
-	align-items: center ;
-	text-align: center;
+	align-items: center;
+	background-color: var(--bgcolor);
+}
+
+/* HEADER */
+.header {
 	display: flex;
 	flex-direction: column;
-
+	align-items: center;
+	margin-bottom: 30px;
 }
 
-img{
-	border-radius: 360px;
+.header img {
+	width: 180px;
+	margin-bottom: 10px;
 }
 
-.structure{
+.header h1 {
+	color: var(--secondary);
+	font-size: 1.5rem;
+	font-weight: bold;
+}
+
+/* MENU */
+.structure {
 	display: flex;
 	flex-direction: column;
 	gap: 15px;
+	width: 320px;
 }
 
-.structure a{
-	background-color: var(--accentcolor);
-	width: 100%;
+.structure a {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+
+	background-color: var(--primary);
+	color: var(--white);
+
 	padding: 15px;
 	text-decoration: none;
-	text-align: center;
-	text-transform: uppercase;
-	font-size: 1.3rem;
+	border-radius: 12px;
+
+	font-size: 1rem;
 	font-weight: bold;
-	border: solid 2px var(--accentcolor);
-	border-radius: 15px;
+
+	transition: 0.3s;
+	box-shadow: 0 4px 10px rgba(0,0,0,0.1);
 }
 
-.structure a:hover{
-	background-color: var(--bgcolor);
-	color: var(--accentcolor);
+.structure a ion-icon {
+	font-size: 1.4rem;
 }
 
-.structure a{
-	display: flex;
-	flex-direction: row;
-	justify-content: center;
+/* HOVER */
+.structure a:hover {
+	background-color: var(--secondary);
+	transform: translateY(-3px);
 }
 
-footer{
-	padding-top: 50px;
+/* FOOTER */
+footer {
+	margin-top: 40px;
+	color: var(--gray);
+	font-size: 0.9rem;
 }
-footer a{
+
+footer a {
+	color: var(--primary);
 	text-decoration: none;
-}
-
-@media (min-width: 1024px){
-	.structure{
-		width: 40vh;
-	}
+	font-weight: bold;
 }
