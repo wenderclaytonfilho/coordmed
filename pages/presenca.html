@@ -8,6 +8,40 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link rel="stylesheet" href="style.css">
+
+    <!-- 🔥 NOVO CSS -->
+    <style>
+        .obs-container {
+            margin-top: 5px;
+        }
+
+        .tipos {
+            display: flex;
+            gap: 8px;
+            margin-top: 5px;
+            flex-wrap: wrap;
+            font-size: 13px;
+        }
+
+        .tipos label {
+            padding: 4px 8px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .troca {
+            background: #fff3cd;
+        }
+
+        .repasse {
+            background: #d1ecf1;
+        }
+
+        .substituicao {
+            background: #f8d7da;
+        }
+    </style>
+
 </head>
 
 <body>
@@ -54,7 +88,6 @@
                 "ANDRÉ MENDES FIGUEIREDO",
                 "WEVERTON JEDIAEL RODRIGUES DE VASCONCELOS",
                 "DENILSON ITAMAR ARAÚJO ROCHA FERREIRA"
-                
             ],
 
             "Ambulatório": [
@@ -151,7 +184,6 @@
 
         const lista = document.getElementById("lista");
 
-        // Ordenar médicos alfabeticamente
         Object.keys(setores).forEach(setor => {
             setores[setor].sort((a, b) => a.localeCompare(b, 'pt-BR'));
         });
@@ -175,7 +207,16 @@
 <strong>${nome}</strong>
 </div>
 
+<!-- 🔥 NOVO BLOCO -->
+<div class="obs-container">
 <input type="text" class="obs" placeholder="Observação (troca, licença, viagem...)">
+
+<div class="tipos">
+<label class="troca"><input type="radio" name="tipo_${nome}" value="Troca"> Troca</label>
+<label class="repasse"><input type="radio" name="tipo_${nome}" value="Repasse"> Repasse</label>
+<label class="substituicao"><input type="radio" name="tipo_${nome}" value="Substituição"> Substituição</label>
+</div>
+</div>
 
 `;
 
@@ -213,19 +254,18 @@
                     let presente = med.querySelector(".check").checked;
                     let obs = med.querySelector(".obs").value;
 
+                    let tipoSel = med.querySelector("input[type='radio']:checked");
+                    let tipo = tipoSel ? tipoSel.value : "";
+
                     if (presente) {
-
-                        bloco += "- " + nome + (obs ? " | " + obs : "") + "\n";
-
+                        bloco += "- " + nome + (obs ? ` | ${tipo ? tipo + ": " : ""}${obs}` : "") + "\n";
                     }
 
                 });
 
                 if (bloco !== "") {
-
                     texto += nomeSetor + "\n";
                     texto += bloco + "\n";
-
                 }
 
             });
@@ -279,10 +319,13 @@
                     let presente = med.querySelector(".check").checked;
                     let obs = med.querySelector(".obs").value;
 
+                    let tipoSel = med.querySelector("input[type='radio']:checked");
+                    let tipo = tipoSel ? tipoSel.value : "";
+
                     if (presente) {
 
                         doc.setFontSize(11);
-                        doc.text("- " + nome + (obs ? " | " + obs : ""), 10, y);
+                        doc.text("- " + nome + (obs ? ` | ${tipo ? tipo + ": " : ""}${obs}` : ""), 10, y);
 
                         y += 6;
 
@@ -300,14 +343,35 @@
             });
 
             const dataArquivo = dataPlantao.split("-").reverse().join("-");
-            doc.save(`MÉDICOS PRESENTES (${dataArquivo}).pdf`);;
+            doc.save(`MÉDICOS PRESENTES (${dataArquivo}).pdf`);
 
         }
+        // 🔥 PERMITIR DESMARCAR RADIO
+        document.addEventListener("click", function (e) {
+
+            if (e.target.type === "radio") {
+
+                if (e.target.checked && e.target.dataset.checked === "true") {
+
+                    e.target.checked = false
+                    e.target.dataset.checked = "false"
+
+                } else {
+
+                    document.querySelectorAll(`input[name="${e.target.name}"]`).forEach(r => {
+                        r.dataset.checked = "false"
+                    })
+
+                    e.target.dataset.checked = "true"
+
+                }
+
+            }
+
+        });
 
     </script>
 
 </body>
 
 </html>
-
-
